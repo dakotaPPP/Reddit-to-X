@@ -6,7 +6,7 @@ This bot automatically pulls top posts from selected subreddits and reposts them
 
 - Pulls top 5 posts from curated subreddits
 - Daily refresh of content pool
-- Posts to Twitter every 30 minutes
+- Posts to Twitter every hour
 - AI-powered title optimization using ChatGPT
 - Prevents duplicate posts
 - Supports images and GIFs
