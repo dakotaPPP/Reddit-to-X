@@ -1,12 +1,12 @@
-# 🤖 Reddit to Twitter Bot
+# 🤖 Reddit to X Bot
 
-This bot automatically pulls top posts from selected subreddits and reposts them to Twitter with AI-optimized titles! ✨
+This bot automatically pulls top posts from selected subreddits and reposts them to X with AI-optimized titles! ✨
 
 ## ✨ Features
 
 - 📱 Pulls top 5 posts from curated subreddits
 - 🔄 Daily refresh of content pool
-- ⏰ Posts to Twitter every hour
+- ⏰ Posts to X every hour
 - 🧠 AI-powered title optimization using ChatGPT
 - 🚫 Prevents duplicate posts
 - 🖼️ Supports images and GIFs
@@ -28,7 +28,7 @@ This bot automatically pulls top posts from selected subreddits and reposts them
 
 4. Copy `.env.example` to `.env` and fill in your API credentials:
    - 🔑 Reddit API credentials (get from https://www.reddit.com/prefs/apps)
-   - 🐦 Twitter API credentials (get from https://developer.twitter.com)
+   - 🐦 X API credentials (get from https://developer.x.com)
    - 🤖 OpenAI API key (get from https://platform.openai.com)
 
 5. Customize the subreddit list in `main.py`
@@ -42,7 +42,7 @@ python main.py
 
 The bot will:
 - 📥 Initially fetch posts from the configured subreddits
-- 🐦 Post to Twitter every 30 minutes
+- 🐦 Post to X every 30 minutes
 - 🔄 Refresh the post pool daily at midnight
 - 💾 Store downloaded media in the `media` directory
 - 📝 Track used posts in `posts_data.json`
@@ -55,7 +55,7 @@ Edit the `SUBREDDITS` list in `main.py` to customize which subreddits to pull fr
 
 - 🐍 Python 3.7+
 - 🔌 PRAW (Reddit API)
-- 🐦 Tweepy (Twitter API)
+- 🐦 Tweepy (X API)
 - 🤖 OpenAI API
 - 🎥 FFmpeg (for video processing)
 - 📦 Other dependencies listed in requirements.txt
