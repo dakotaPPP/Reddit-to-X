@@ -36,7 +36,6 @@ auth = tweepy.OAuth1UserHandler(
     access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
 )
 twitter_client_v1 = tweepy.API(auth)
-print(twitter_client_v1.get_user())
 
 # Initialize OpenAI
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -61,13 +60,13 @@ class RedditPost:
         self.url = post['url']
         self.subreddit = post['subreddit']
         self.used = post['used']
-        self.media_path = post['media_path'] if 'media_path' in post else None
+        self.media_path = post.get('media_path', None)  # Use get to handle missing keys
 
 def optimize_title(original_title):
     """Use ChatGPT to optimize the title for Twitter."""
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", 
                 "content": """Original title: {original_title}
@@ -80,7 +79,11 @@ def optimize_title(original_title):
                     5. Maintains the original meaning but makes it more compelling
                     6. Avoids clickbait or sensationalism
                     7. Is written in a natural, conversational tone
-
+                    8. Please don't use punctuation
+                    9. type in all lower case
+                    10. Prented you are a gen z, zoomer on the internet
+                    11. Don't use emojis or hashtags
+                    
                     Respond with only the optimized title."""},
                 {"role": "user", "content": original_title}
             ]
@@ -108,12 +111,13 @@ def download_media(url, post_id):
     return None
 
 def load_posts():
-    """Load posts from JSON file."""
-    if os.path.exists(POSTS_FILE):
-        with open(POSTS_FILE, 'r') as f:
-            data = json.load(f)
-            return [RedditPost(post) for post in data]
-    return []
+    if not os.path.exists(POSTS_FILE):
+        return []
+    
+    with open(POSTS_FILE, 'r') as f:
+        data = json.load(f)
+    
+    return [RedditPost(post) for post in data]
 
 def save_posts(posts):
     """Save posts to JSON file."""
@@ -158,7 +162,6 @@ def post_to_twitter():
     try:
         # Optimize the title
         optimized_title = optimize_title(post.title)
-        print("made it past optimize_title")
         # Check if media file still exists
         if not os.path.exists(post.media_path):
             print(f"Media file not found: {post.media_path}")
@@ -194,15 +197,27 @@ def post_to_twitter():
     except Exception as e:
         print(f"Error in post_to_twitter: {e}")
 
+def clean_media_directory():
+    """Delete all files in the media directory."""
+    for media_file in MEDIA_DIR.glob('*'):
+        try:
+            media_file.unlink()
+            print(f"Deleted media file: {media_file}")
+        except Exception as e:
+            print(f"Error deleting media file {media_file}: {e}")
+
 def main():
+
+    clean_media_directory()
+
     # Fetch new posts at the start of each day
     schedule.every().day.at("00:00").do(fetch_new_posts)
     
     # Post to Twitter every 60 minutes
-    schedule.every(1).minutes.do(post_to_twitter)
+    schedule.every(60).minutes.do(post_to_twitter)
     
     # Initial fetch
-    #fetch_new_posts()
+    fetch_new_posts()
     post_to_twitter()
     
     while True:
