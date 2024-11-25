@@ -9,6 +9,7 @@ import openai
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
+import random
 
 # Load environment variables
 load_dotenv()
@@ -42,11 +43,13 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Configuration
 SUBREDDITS = [
+    'TikTokCringe',
+    'mildlyinfuriating',
+    'clevercomebacks',
     'interestingasfuck',
-    'Damnthatsinteresting',
     'nextfuckinglevel',
-    'MadeMeSmile',
-    'aww'
+    'aww',
+    'ArchitecturePorn'
     # Add more subreddits here
 ]
 POSTS_FILE = 'posts_data.json'
@@ -54,13 +57,24 @@ MEDIA_DIR = Path('media')
 MEDIA_DIR.mkdir(exist_ok=True)
 
 class RedditPost:
-    def __init__(self, post):
-        self.id = post['id']
-        self.title = post['title']
-        self.url = post['url']
-        self.subreddit = post['subreddit']
-        self.used = post['used']
-        self.media_path = post.get('media_path', None)  # Use get to handle missing keys
+    def __init__(self, post, from_json=False):
+        """Initialize RedditPost with either a PRAW submission object or JSON data."""
+        if from_json:
+            self.id = post.id
+            self.title = post.title
+            self.url = post.url
+            self.subreddit = post.subreddit
+            self.used = post.used
+            self.media_path = post.media_path
+            self.created_utc = post.created_utc
+        else:
+            self.id = post.id
+            self.title = post.title
+            self.url = post.url
+            self.subreddit = post.subreddit.display_name
+            self.used = False
+            self.media_path = None
+            self.created_utc = post.created_utc
 
 def optimize_title(original_title):
     """Use ChatGPT to optimize the title for Twitter."""
@@ -111,13 +125,16 @@ def download_media(url, post_id):
     return None
 
 def load_posts():
-    if not os.path.exists(POSTS_FILE):
-        return []
-    
-    with open(POSTS_FILE, 'r') as f:
-        data = json.load(f)
-    
-    return [RedditPost(post) for post in data]
+    """Load posts from JSON file."""
+    if os.path.exists(POSTS_FILE):
+        with open(POSTS_FILE, 'r') as f:
+            data = json.load(f)
+            posts = []
+            for post_data in data:
+                post = RedditPost(type('obj', (object,), post_data), from_json=True)
+                posts.append(post)
+            return posts
+    return []
 
 def save_posts(posts):
     """Save posts to JSON file."""
@@ -159,6 +176,7 @@ def post_to_twitter():
         return
     
     post = unused_posts[0]
+    post = random.choice(unused_posts)
     try:
         # Optimize the title
         optimized_title = optimize_title(post.title)
@@ -178,12 +196,9 @@ def post_to_twitter():
                 text=optimized_title,
                 media_ids=[media.media_id_string]
             )
-            print(f"Posted to Twitter: {optimized_title}")
             # Mark post as used and save
             post.used = True
             save_posts(posts)
-            
-            print(f"Posted to Twitter: {optimized_title}")
             
             # Clean up media file after successful post
             try:
@@ -218,7 +233,6 @@ def main():
     
     # Initial fetch
     fetch_new_posts()
-    post_to_twitter()
     
     while True:
         schedule.run_pending()
