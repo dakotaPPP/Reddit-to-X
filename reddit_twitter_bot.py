@@ -20,13 +20,23 @@ reddit = praw.Reddit(
     user_agent="RedditTwitterBot/1.0"
 )
 
-# Initialize Twitter API v2
-twitter_client = tweepy.Client(
+# Initialize Twitter API v2 Client for general operations
+twitter_client_v2 = tweepy.Client(
     consumer_key=os.getenv('TWITTER_API_KEY'),
     consumer_secret=os.getenv('TWITTER_API_SECRET'),
     access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
     access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
 )
+
+# Initialize Twitter API v1.1 API for media uploads
+auth = tweepy.OAuth1UserHandler(
+    consumer_key=os.getenv('TWITTER_API_KEY'),
+    consumer_secret=os.getenv('TWITTER_API_SECRET'),
+    access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
+    access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
+)
+twitter_client_v1 = tweepy.API(auth)
+print(twitter_client_v1.get_user())
 
 # Initialize OpenAI
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -37,7 +47,7 @@ SUBREDDITS = [
     'Damnthatsinteresting',
     'nextfuckinglevel',
     'MadeMeSmile',
-    'Aww'
+    'aww'
     # Add more subreddits here
 ]
 POSTS_FILE = 'posts_data.json'
@@ -46,12 +56,12 @@ MEDIA_DIR.mkdir(exist_ok=True)
 
 class RedditPost:
     def __init__(self, post):
-        self.id = post.id
-        self.title = post.title
-        self.url = post.url
-        self.subreddit = post.subreddit.display_name
-        self.used = False
-        self.media_path = None
+        self.id = post['id']
+        self.title = post['title']
+        self.url = post['url']
+        self.subreddit = post['subreddit']
+        self.used = post['used']
+        self.media_path = post['media_path'] if 'media_path' in post else None
 
 def optimize_title(original_title):
     """Use ChatGPT to optimize the title for Twitter."""
@@ -102,7 +112,7 @@ def load_posts():
     if os.path.exists(POSTS_FILE):
         with open(POSTS_FILE, 'r') as f:
             data = json.load(f)
-            return [RedditPost.__dict__.update(post) for post in data]
+            return [RedditPost(post) for post in data]
     return []
 
 def save_posts(posts):
@@ -148,7 +158,7 @@ def post_to_twitter():
     try:
         # Optimize the title
         optimized_title = optimize_title(post.title)
-        
+        print("made it past optimize_title")
         # Check if media file still exists
         if not os.path.exists(post.media_path):
             print(f"Media file not found: {post.media_path}")
@@ -158,12 +168,14 @@ def post_to_twitter():
             
         # Upload media and post to Twitter
         try:
-            media = twitter_client.media_upload(post.media_path)
-            tweet = twitter_client.create_tweet(
+            print(f"Posting to Twitter: {optimized_title}")
+            media = twitter_client_v1.media_upload(post.media_path)
+            print(f"Media uploaded: {media.media_id_string}")
+            tweet = twitter_client_v2.create_tweet(
                 text=optimized_title,
-                media_ids=[media.media_id]
+                media_ids=[media.media_id_string]
             )
-            
+            print(f"Posted to Twitter: {optimized_title}")
             # Mark post as used and save
             post.used = True
             save_posts(posts)
@@ -179,11 +191,6 @@ def post_to_twitter():
                 
         except Exception as e:
             print(f"Error posting to Twitter: {e}")
-            if "media" in str(e).lower():
-                # If media-related error, mark as used to skip
-                post.used = True
-                save_posts(posts)
-                
     except Exception as e:
         print(f"Error in post_to_twitter: {e}")
 
@@ -192,10 +199,11 @@ def main():
     schedule.every().day.at("00:00").do(fetch_new_posts)
     
     # Post to Twitter every 60 minutes
-    schedule.every(60).minutes.do(post_to_twitter)
+    schedule.every(1).minutes.do(post_to_twitter)
     
     # Initial fetch
-    fetch_new_posts()
+    #fetch_new_posts()
+    post_to_twitter()
     
     while True:
         schedule.run_pending()
