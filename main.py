@@ -6,8 +6,6 @@ import praw
 import tweepy
 import requests
 import openai
-import yt_dlp
-from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 import random
@@ -123,57 +121,75 @@ def download_media(url, post_id):
                     f.write(response.content)
                 return str(file_path)
         
-        # For videos (including Reddit-hosted videos)
-        elif 'v.redd.it' in url or url.lower().endswith(('.mp4', '.mov', '.webm')):
-            print(f"Downloading video from URL: {url}")
+        # For Reddit-hosted videos
+        elif 'v.redd.it' in url:
+            print(f"Downloading Reddit video from URL: {url}")
             output_path = str(MEDIA_DIR / f'{post_id}.mp4')
-            ydl_opts = {
-                'format': 'best',  # Download best quality
-                'merge_output_format': 'mp4',
-                'outtmpl': output_path,
-                'quiet': False,  # Show progress for debugging
-                'no_warnings': False,
-                'extract_flat': False,
-                # Additional options for Reddit videos
-                'postprocessors': [{
-                    'key': 'FFmpegVideoConvertor',
-                    'preferedformat': 'mp4',
-                }],
-                # Download both video and audio and merge
-                'postprocessor_args': [
-                    '-c:v', 'copy',
-                    '-c:a', 'aac',
-                ],
-            }
             
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    print("Starting download with yt-dlp...")
-                    ydl.download([url])
-                    print(f"Download completed, checking file at: {output_path}")
+                # Get the JSON data for the video
+                json_url = f"{url}/DASH_720.mp4"
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+                
+                # Try to download the video
+                response = requests.get(json_url, headers=headers, stream=True)
+                if response.status_code == 200:
+                    with open(output_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
                     
                     if os.path.exists(output_path):
                         file_size = os.path.getsize(output_path)
-                        print(f"File downloaded successfully. Size: {file_size} bytes")
-                        return output_path
-                    else:
-                        print(f"File not found at expected path: {output_path}")
-                        return None
+                        if file_size > 0:
+                            print(f"Video downloaded successfully. Size: {file_size} bytes")
+                            return output_path
+                
+                # If 720p failed, try 480p
+                if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                    json_url = f"{url}/DASH_480.mp4"
+                    response = requests.get(json_url, headers=headers, stream=True)
+                    if response.status_code == 200:
+                        with open(output_path, 'wb') as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                if chunk:
+                                    f.write(chunk)
                         
+                        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                            print(f"Video downloaded successfully (480p). Size: {os.path.getsize(output_path)} bytes")
+                            return output_path
+                
+                print("Failed to download video directly")
+                return None
+                
             except Exception as e:
-                print(f"Error during video download: {str(e)}")
-                # Try alternate download method for Reddit videos
-                if 'v.redd.it' in url:
-                    try:
-                        print("Attempting alternate download method...")
-                        # Try downloading just the video stream
-                        ydl_opts['format'] = 'bestvideo[ext=mp4]'
-                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                            ydl.download([url])
-                            if os.path.exists(output_path):
-                                return output_path
-                    except Exception as e2:
-                        print(f"Alternate download method failed: {str(e2)}")
+                print(f"Error downloading Reddit video: {str(e)}")
+                return None
+        
+        # For direct video links
+        elif url.lower().endswith(('.mp4', '.mov', '.webm')):
+            print(f"Downloading direct video from URL: {url}")
+            output_path = str(MEDIA_DIR / f'{post_id}.mp4')
+            
+            try:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+                response = requests.get(url, headers=headers, stream=True)
+                if response.status_code == 200:
+                    with open(output_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                    
+                    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                        print(f"Video downloaded successfully. Size: {os.path.getsize(output_path)} bytes")
+                        return output_path
+            
+            except Exception as e:
+                print(f"Error downloading direct video: {str(e)}")
                 return None
     
     except Exception as e:
@@ -410,7 +426,7 @@ def main():
     
     # Initial fetch
     fetch_new_posts()
-    post_to_twitter()
+    #post_to_twitter()
     
     while True:
         schedule.run_pending()
