@@ -6,7 +6,6 @@ import praw
 import tweepy
 import requests
 import openai
-from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 import random
