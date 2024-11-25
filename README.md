@@ -49,7 +49,7 @@ The bot will:
 
 ## ⚙️ Configuration
 
-Edit the `SUBREDDITS` list in `reddit_twitter_bot.py` to customize which subreddits to pull from.
+Edit the `SUBREDDITS` list in `main.py` to customize which subreddits to pull from.
 
 ## 📋 Requirements
 
