@@ -31,13 +31,13 @@ This bot automatically pulls top posts from selected subreddits and reposts them
    - 🐦 Twitter API credentials (get from https://developer.twitter.com)
    - 🤖 OpenAI API key (get from https://platform.openai.com)
 
-5. Customize the subreddit list in `reddit_twitter_bot.py`
+5. Customize the subreddit list in `main.py`
 
 ## 🚀 Usage
 
 Run the bot:
 ```bash
-python reddit_twitter_bot.py
+python main.py
 ```
 
 The bot will:
