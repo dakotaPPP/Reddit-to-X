@@ -203,7 +203,7 @@ def fetch_new_posts():
     for subreddit_name in SUBREDDITS:
         try:
             subreddit = reddit.subreddit(subreddit_name)
-            for post in subreddit.hot(limit=10):
+            for post in subreddit.hot(limit=5):
                 if not post.is_self and hasattr(post, 'url'):
                     print(f"\nProcessing post: {post.title[:50]}...")
                     print(f"URL: {post.url}")
