@@ -423,7 +423,7 @@ def main():
     
     # Post to Twitter every 60 minutes
     # note will make a good tweet schedule whenever analytics are available
-    schedule.every(90).minutes.do(post_to_twitter)
+    schedule.every(144).minutes.do(post_to_twitter)
     
     # Initial fetch
     fetch_new_posts()
