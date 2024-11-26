@@ -422,11 +422,10 @@ def main():
     schedule.every().day.at("00:00").do(fetch_new_posts)
     
     # Post to Twitter every 60 minutes
-    schedule.every(60).minutes.do(post_to_twitter)
+    schedule.every(90).minutes.do(post_to_twitter)
     
     # Initial fetch
     fetch_new_posts()
-    #post_to_twitter()
     
     while True:
         schedule.run_pending()
