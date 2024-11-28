@@ -90,14 +90,15 @@ def optimize_title(original_title):
                     1. Is attention-grabbing and engaging
                     2. Uses SEO-friendly keywords
                     3. Keep it brief and don't be afraid to use profanity
-                    4. Is under 200 characters
+                    4. Is under 100 characters
                     5. Maintains the original meaning but makes it more compelling
                     6. Avoids clickbait or sensationalism
                     7. Is written in a natural, conversational tone
                     8. Please don't use punctuation
                     9. type in all lower case
-                    10. Prented you are a gen z, zoomer on the internet
+                    10. You are a zoomer social media pro on the internet
                     11. Don't use emojis or hashtags
+                    12. Do not use the word vibe nor vibes
                     
                     Respond with only the optimized title."""},
                 {"role": "user", "content": original_title}
