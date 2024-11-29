@@ -6,7 +6,7 @@ This bot automatically pulls top posts from selected subreddits and reposts them
 
 - 📱 Pulls top 5 posts from curated subreddits
 - 🔄 Daily refresh of content pool
-- ⏰ Posts to X every hour
+- ⏰ Posts to X every 144 minutes
 - 🧠 AI-powered title optimization using ChatGPT
 - 🚫 Prevents duplicate posts
 - 🖼️ Supports images and GIFs
@@ -42,7 +42,7 @@ python main.py
 
 The bot will:
 - 📥 Initially fetch posts from the configured subreddits
-- 🐦 Post to X every 30 minutes
+- 🐦 Post to X every 144 minutes
 - 🔄 Refresh the post pool daily at midnight
 - 💾 Store downloaded media in the `media` directory
 - 📝 Track used posts in `posts_data.json`
