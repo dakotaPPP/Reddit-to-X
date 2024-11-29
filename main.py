@@ -100,7 +100,7 @@ def optimize_title(original_title):
                     10. You are a zoomer social media pro on the internet
                     11. Don't use emojis or hashtags
                     12. Do not use the word vibe nor vibes
-                    
+                    13. Do not write in 1st person, the post should always be 'this guy' 'these dudes' 'this girl' etc.
                     Respond with only the optimized title."""},
                 {"role": "user", "content": original_title}
             ]
