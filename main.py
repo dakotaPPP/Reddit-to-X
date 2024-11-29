@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 import random
 import subprocess
 from moviepy.editor import VideoFileClip
+import yt_dlp
 
 # Load environment variables
 load_dotenv()
@@ -128,41 +129,23 @@ def download_media(url, post_id):
             output_path = str(MEDIA_DIR / f'{post_id}.mp4')
             
             try:
-                # Get the JSON data for the video
-                json_url = f"{url}/DASH_720.mp4"
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                ydl_opts = {
+                    'format': 'bv*+ba/b',  # Best video + best audio / best combined format
+                    'outtmpl': output_path,
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extract_flat': False,
+                    'merge_output_format': 'mp4'
                 }
                 
-                # Try to download the video
-                response = requests.get(json_url, headers=headers, stream=True)
-                if response.status_code == 200:
-                    with open(output_path, 'wb') as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                    
-                    if os.path.exists(output_path):
-                        file_size = os.path.getsize(output_path)
-                        if file_size > 0:
-                            print(f"Video downloaded successfully. Size: {file_size} bytes")
-                            return output_path
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
                 
-                # If 720p failed, try 480p
-                if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
-                    json_url = f"{url}/DASH_480.mp4"
-                    response = requests.get(json_url, headers=headers, stream=True)
-                    if response.status_code == 200:
-                        with open(output_path, 'wb') as f:
-                            for chunk in response.iter_content(chunk_size=8192):
-                                if chunk:
-                                    f.write(chunk)
-                        
-                        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                            print(f"Video downloaded successfully (480p). Size: {os.path.getsize(output_path)} bytes")
-                            return output_path
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                    print(f"Video downloaded successfully. Size: {os.path.getsize(output_path)} bytes")
+                    return output_path
                 
-                print("Failed to download video directly")
+                print("Failed to download video")
                 return None
                 
             except Exception as e:
