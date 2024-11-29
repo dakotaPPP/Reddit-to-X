@@ -126,33 +126,127 @@ def download_media(url, post_id):
         # For Reddit-hosted videos
         elif 'v.redd.it' in url:
             print(f"Downloading Reddit video from URL: {url}")
+            temp_video_path = str(MEDIA_DIR / f'{post_id}_temp_video.mp4')
+            temp_audio_path = str(MEDIA_DIR / f'{post_id}_temp_audio.mp4')
             output_path = str(MEDIA_DIR / f'{post_id}.mp4')
             
             try:
-                ydl_opts = {
-                    'format': 'bv*+ba/b',  # Best video + best audio / best combined format
-                    'outtmpl': output_path,
-                    'quiet': True,
-                    'no_warnings': True,
-                    'extract_flat': False,
-                    'merge_output_format': 'mp4',
-                    'http_headers': {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                # Get the submission using PRAW
+                submission = reddit.submission(id=post_id)
+                
+                # Get the secure media info
+                if hasattr(submission, 'secure_media') and submission.secure_media:
+                    video_data = submission.secure_media['reddit_video']
+                    
+                    # Try to get HLS URL first
+                    hls_url = video_data.get('hls_url')
+                    if hls_url:
+                        print("Using HLS stream URL")
+                        headers = {
+                            'User-Agent': f'python:reddit-to-twitter:v1.0 (by /u/{os.getenv("REDDIT_USERNAME")})'
+                        }
+                        
+                        # Download using FFmpeg directly from HLS stream
+                        cmd = [
+                            'ffmpeg', '-y',
+                            '-headers', f'User-Agent: {headers["User-Agent"]}',
+                            '-i', hls_url,
+                            '-c', 'copy',
+                            output_path
+                        ]
+                        
+                        result = subprocess.run(cmd, capture_output=True)
+                        if result.returncode == 0:
+                            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                                print(f"Video downloaded successfully using HLS. Size: {os.path.getsize(output_path)} bytes")
+                                return output_path
+                        else:
+                            print(f"FFmpeg HLS error: {result.stderr.decode()}")
+                    
+                    # Fallback to direct download if HLS fails
+                    print("Falling back to direct download...")
+                    video_url = video_data['fallback_url']
+                    
+                    headers = {
+                        'User-Agent': f'python:reddit-to-twitter:v1.0 (by /u/{os.getenv("REDDIT_USERNAME")})'
                     }
-                }
-                
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
-                
-                if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                    print(f"Video downloaded successfully. Size: {os.path.getsize(output_path)} bytes")
-                    return output_path
-                
+                    
+                    # Download video
+                    print("Downloading video stream...")
+                    response = requests.get(video_url, headers=headers)
+                    if response.status_code == 200:
+                        with open(temp_video_path, 'wb') as f:
+                            f.write(response.content)
+                    else:
+                        print(f"Failed to download video: {response.status_code}")
+                        return None
+                    
+                    # Try different audio URL patterns
+                    has_audio = False
+                    base_url = video_url.rsplit('/', 1)[0]
+                    audio_urls = [
+                        f"{base_url}/DASH_audio.mp4",
+                        f"{base_url}/audio",
+                        video_url.replace('DASH_720.mp4', 'DASH_audio.mp4')
+                            .replace('DASH_1080.mp4', 'DASH_audio.mp4')
+                            .replace('DASH_480.mp4', 'DASH_audio.mp4')
+                            .replace('DASH_360.mp4', 'DASH_audio.mp4')
+                            .replace('DASH_240.mp4', 'DASH_audio.mp4')
+                    ]
+                    
+                    print("Trying to download audio stream...")
+                    for audio_url in audio_urls:
+                        print(f"Attempting audio URL: {audio_url}")
+                        response = requests.get(audio_url, headers=headers)
+                        if response.status_code == 200:
+                            print(f"Successfully found audio at: {audio_url}")
+                            with open(temp_audio_path, 'wb') as f:
+                                f.write(response.content)
+                            has_audio = True
+                            break
+                        else:
+                            print(f"Failed to get audio from {audio_url}: {response.status_code}")
+                    
+                    # Combine video and audio if both exist
+                    if has_audio and os.path.exists(temp_video_path) and os.path.exists(temp_audio_path):
+                        print("Combining video and audio streams...")
+                        cmd = [
+                            'ffmpeg', '-y',
+                            '-i', temp_video_path,
+                            '-i', temp_audio_path,
+                            '-c:v', 'copy',
+                            '-c:a', 'aac',
+                            '-shortest',
+                            output_path
+                        ]
+                        result = subprocess.run(cmd, capture_output=True)
+                        if result.returncode != 0:
+                            print(f"FFmpeg error: {result.stderr.decode()}")
+                            # If combining fails, just use the video
+                            os.rename(temp_video_path, output_path)
+                    else:
+                        print("No audio found or audio download failed, using video only")
+                        # Just use video if no audio
+                        os.rename(temp_video_path, output_path)
+                    
+                    # Clean up temporary files
+                    for path in [temp_video_path, temp_audio_path]:
+                        if os.path.exists(path):
+                            os.remove(path)
+                    
+                    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                        print(f"Video downloaded successfully. Size: {os.path.getsize(output_path)} bytes")
+                        return output_path
+                    
                 print("Failed to download video")
                 return None
                 
             except Exception as e:
                 print(f"Error downloading Reddit video: {str(e)}")
+                # Clean up any temporary files
+                for path in [temp_video_path, temp_audio_path]:
+                    if os.path.exists(path):
+                        os.remove(path)
                 return None
         
         # For direct video links
