@@ -13,6 +13,7 @@ from PIL import Image
 import subprocess
 from moviepy.editor import VideoFileClip
 import re
+from RedDownloader import RedDownloader
 
 # Load environment variables
 load_dotenv()
@@ -64,7 +65,7 @@ SUBREDDITS = [
     # Add more subreddits here
 ]
 
-
+MAX_VIDEO_COUNT = 1
 POSTS_FILE = 'posts_data.json'
 MEDIA_DIR = Path('media')
 MEDIA_DIR.mkdir(exist_ok=True)
@@ -185,129 +186,23 @@ def download_media(url, post_id):
                 return None
 
         # For Reddit-hosted videos
-        elif 'v.redd.it' in url:
-            print(f"Downloading Reddit video from URL: {url}")
-            temp_video_path = str(MEDIA_DIR / f'{post_id}_temp_video.mp4')
-            temp_audio_path = str(MEDIA_DIR / f'{post_id}_temp_audio.mp4')
-            output_path = str(MEDIA_DIR / f'{post_id}.mp4')
-            
+        elif re.search('v.redd.it', url):
+
+            # Extract the video ID from the URL
+            file_path = MEDIA_DIR / f"{post_id}downloaded.mp4"
+
+            # Download the video
             try:
-                # Get the submission using PRAW
-                submission = reddit.submission(id=post_id)
-                
-                # Get the secure media info
-                if hasattr(submission, 'secure_media') and submission.secure_media:
-                    video_data = submission.secure_media['reddit_video']
-                    
-                    # Try to get HLS URL first
-                    hls_url = video_data.get('hls_url')
-                    if hls_url:
-                        print("Using HLS stream URL")
-                        headers = {
-                            'User-Agent': f'python:reddit-to-twitter:v1.0 (by /u/{os.getenv("REDDIT_USERNAME")})'
-                        }
-                        
-                        # Download using FFmpeg directly from HLS stream
-                        cmd = [
-                            'ffmpeg', '-y',
-                            '-headers', f'User-Agent: {headers["User-Agent"]}',
-                            '-i', hls_url,
-                            '-c', 'copy',
-                            output_path
-                        ]
-                        
-                        result = subprocess.run(cmd, capture_output=True)
-                        if result.returncode == 0:
-                            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                                print(f"Video downloaded successfully using HLS. Size: {os.path.getsize(output_path)} bytes")
-                                return output_path
-                        else:
-                            print(f"FFmpeg HLS error: {result.stderr.decode()}")
-                    
-                    # Fallback to direct download if HLS fails
-                    print("Falling back to direct download...")
-                    video_url = video_data['fallback_url']
-                    
-                    headers = {
-                        'User-Agent': f'python:reddit-to-twitter:v1.0 (by /u/{os.getenv("REDDIT_USERNAME")})'
-                    }
-                    
-                    # Download video
-                    print("Downloading video stream...")
-                    response = requests.get(video_url, headers=headers)
-                    if response.status_code == 200:
-                        with open(temp_video_path, 'wb') as f:
-                            f.write(response.content)
-                    else:
-                        print(f"Failed to download video: {response.status_code}")
-                        return None
-                    
-                    # Try different audio URL patterns
-                    has_audio = False
-                    base_url = video_url.rsplit('/', 1)[0]
-                    audio_urls = [
-                        f"{base_url}/DASH_audio.mp4",
-                        f"{base_url}/audio",
-                        video_url.replace('DASH_720.mp4', 'DASH_audio.mp4')
-                            .replace('DASH_1080.mp4', 'DASH_audio.mp4')
-                            .replace('DASH_480.mp4', 'DASH_audio.mp4')
-                            .replace('DASH_360.mp4', 'DASH_audio.mp4')
-                            .replace('DASH_240.mp4', 'DASH_audio.mp4')
-                    ]
-                    
-                    print("Trying to download audio stream...")
-                    for audio_url in audio_urls:
-                        print(f"Attempting audio URL: {audio_url}")
-                        response = requests.get(audio_url, headers=headers)
-                        if response.status_code == 200:
-                            print(f"Successfully found audio at: {audio_url}")
-                            with open(temp_audio_path, 'wb') as f:
-                                f.write(response.content)
-                            has_audio = True
-                            break
-                        else:
-                            print(f"Failed to get audio from {audio_url}: {response.status_code}")
-                    
-                    # Combine video and audio if both exist
-                    if has_audio and os.path.exists(temp_video_path) and os.path.exists(temp_audio_path):
-                        print("Combining video and audio streams...")
-                        cmd = [
-                            'ffmpeg', '-y',
-                            '-i', temp_video_path,
-                            '-i', temp_audio_path,
-                            '-c:v', 'copy',
-                            '-c:a', 'aac',
-                            '-shortest',
-                            output_path
-                        ]
-                        result = subprocess.run(cmd, capture_output=True)
-                        if result.returncode != 0:
-                            print(f"FFmpeg error: {result.stderr.decode()}")
-                            # If combining fails, just use the video
-                            os.rename(temp_video_path, output_path)
-                    else:
-                        print("No audio found or audio download failed, using video only")
-                        # Just use video if no audio
-                        os.rename(temp_video_path, output_path)
-                    
-                    # Clean up temporary files
-                    for path in [temp_video_path, temp_audio_path]:
-                        if os.path.exists(path):
-                            os.remove(path)
-                    
-                    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                        print(f"Video downloaded successfully. Size: {os.path.getsize(output_path)} bytes")
-                        return output_path
-                    
-                print("Failed to download video")
-                return None
+                print("downloading media reddit video")
+                RedDownloader.Download(url, destination = str(MEDIA_DIR / f"{post_id}"))
+
+                return str(file_path)
                 
             except Exception as e:
                 print(f"Error downloading Reddit video: {str(e)}")
                 # Clean up any temporary files
-                for path in [temp_video_path, temp_audio_path]:
-                    if os.path.exists(path):
-                        os.remove(path)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
                 return None
         
         # For direct video links
@@ -357,32 +252,43 @@ def save_posts(posts):
 
 def fetch_new_posts():
     """Fetch new posts from Reddit."""
+    video_count = 0
     posts = []
     for subreddit_name in SUBREDDITS:
         try:
             subreddit = reddit.subreddit(subreddit_name)
             # Get the top 5 posts for the week from the subreddit
-            for index ,post in enumerate(subreddit.top(limit=5, time_filter = 'week')):
+            for index ,post in enumerate(subreddit.top(limit=20, time_filter = 'week')):
 
-                print('this is post number', index)
+
 
                 if not post.is_self and hasattr(post, 'url'):
                     print(f"\nProcessing post: {post.title[:50]}...")
                     print(f"URL: {post.url}")
-                    
-                    if subreddit_name.lower() == 'tiktokcringe' and not (post.is_video or 'v.redd.it' in post.url):
-                        print("Skipping non-video post in TikTokCringe")
-                        continue
+
+
+                    # If you want videos only uncomment the following
+                    # if not (post.is_video or 'v.redd.it' in post.url):
+                    #     continue
+
+                    # video_count += 1
                     
                     reddit_post = RedditPost(post)
                     media_path = download_media(reddit_post.url, reddit_post.id)
+
+                    time.sleep(2)
                     
                     if media_path:
+
+                        print(media_path)
                         reddit_post.media_path = media_path
                         posts.append(reddit_post)
                         print(f"Successfully added {'video' if media_path.endswith('.mp4') else 'image'} post from r/{subreddit_name}")
                     else:
                         print("Failed to download media, skipping post")
+
+                    if video_count > MAX_VIDEO_COUNT:
+                        break
                         
         except Exception as e:
             print(f"Error fetching posts from {subreddit_name}: {str(e)}")
@@ -493,17 +399,6 @@ def post_to_twitter():
             print(f"Uploading media file: {upload_path}")
             media_category = 'tweet_video' if is_video else 'tweet_image'
 
-            if not os.path.exists(upload_path):
-                print("File does not exist!")
-            else:
-                print(f"File size: {os.path.getsize(upload_path)} bytes")
-                try:
-                    img = Image.open(upload_path)
-                    print(f"Image format: {img.format}")
-                except Exception as e:
-                    print(f"Error reading image: {e}")
-
-            
             # Ensure that the app's permissions include "Read and Write" 
             media = twitter_api.media_upload(
                 filename=upload_path,
