@@ -29,6 +29,7 @@ This bot automatically pulls top posts from selected subreddits and reposts them
 4. Copy `.env.example` to `.env` and fill in your API credentials:
    - 🔑 Reddit API credentials (get from https://www.reddit.com/prefs/apps)
    - 🐦 X API credentials (get from https://developer.x.com)
+      - Go to your app's settings and ensure that the app's permissions include "Read and Write" or "Read, Write, and Direct Messages."
    - 🤖 OpenAI API key (get from https://platform.openai.com)
 
 5. Customize the subreddit list in `main.py`

@@ -9,9 +9,10 @@ import openai
 from pathlib import Path
 from dotenv import load_dotenv
 import random
+from PIL import Image
 import subprocess
 from moviepy.editor import VideoFileClip
-import yt_dlp
+import re
 
 # Load environment variables
 load_dotenv()
@@ -32,28 +33,38 @@ twitter_client = tweepy.Client(
 )
 
 # Initialize Twitter API v1.1 for media upload
+
 twitter_auth = tweepy.OAuth1UserHandler(
     os.getenv('TWITTER_API_KEY'),
     os.getenv('TWITTER_API_SECRET'),
     os.getenv('TWITTER_ACCESS_TOKEN'),
     os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
 )
-twitter_api = tweepy.API(twitter_auth)
+twitter_api = tweepy.API(twitter_auth, wait_on_rate_limit=True)
 
+try:
+    user = twitter_api.verify_credentials()
+    if user:
+        print(f"Authentication successful. Logged in as {user.screen_name}")
+    else:
+        print("Authentication failed.")
+except Exception as e:
+    print(f"Error during authentication: {e}")
+
+# Initialize X.ai
+openai.api_key = os.getenv("XAI_API_KEY")
+openai.api_base = "https://api.x.ai/v1"
+    
 # Initialize OpenAI
-openai.api_key = os.getenv('OPENAI_API_KEY')
+# openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Configuration
 SUBREDDITS = [
-    'TikTokCringe',
-    'mildlyinfuriating',
-    'clevercomebacks',
-    'interestingasfuck',
-    'nextfuckinglevel',
-    'aww',
-    'ArchitecturePorn'
+    'tiktokcringe',
     # Add more subreddits here
 ]
+
+
 POSTS_FILE = 'posts_data.json'
 MEDIA_DIR = Path('media')
 MEDIA_DIR.mkdir(exist_ok=True)
@@ -79,11 +90,12 @@ class RedditPost:
             self.created_utc = post.created_utc
 
 def optimize_title(original_title):
-    """Use ChatGPT to optimize the title for Twitter."""
+
+    """Use xAu to optimize the title for Twitter."""
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=[
+       response = openai.ChatCompletion.create(
+            model=os.getenv("MODEL_NAME"),
+               messages=[
                 {"role": "system", 
                 "content": """Original title: {original_title}
 
@@ -105,10 +117,12 @@ def optimize_title(original_title):
                 {"role": "user", "content": original_title}
             ]
         )
-        return response.choices[0].message['content'].strip()
+
     except Exception as e:
         print(f"Error optimizing title: {e}")
         return original_title
+
+    return response['choices'][0]['message']['content']
 
 def download_media(url, post_id):
     """Download media from Reddit post."""
@@ -122,7 +136,54 @@ def download_media(url, post_id):
                 with open(file_path, 'wb') as f:
                     f.write(response.content)
                 return str(file_path)
-        
+            
+        if re.search('/gallery/', url):
+        # Transform the URL to the API endpoint
+            permalink = url.replace("gallery", "comments")
+            api_url = f"{permalink}.json"
+
+            # Fetch the gallery metadata
+            headers = {"User-Agent": "YourApp/0.1"}
+            response = requests.get(api_url, headers=headers)
+
+            # Check for a valid response
+
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    gallery_data = data[0]["data"]["children"][0]["data"]
+
+                    # Extract gallery metadata
+                    media_metadata = gallery_data.get("media_metadata", {})
+                    if not media_metadata:
+                        print("No media metadata found in gallery.")
+                        return None
+
+                    file_paths = []
+                    for key, media in media_metadata.items():
+                        media_url = media["s"]["u"].replace("&amp;", "&")  # Replace HTML entities
+                        extension = media_url.split('.')[-1].split('?')[0].lower()
+                        file_path = MEDIA_DIR / f"{post_id}_{key}.{extension}"
+
+                        # Download each image in the gallery
+                        media_response = requests.get(media_url)
+                        if media_response.status_code == 200:
+                            with open(str(file_path), 'wb') as f:
+                                f.write(media_response.content)
+                            file_paths.append(str(file_path))
+                        else:
+                            print(f"Failed to download media: {media_url}")
+
+                    return file_paths[0]
+                except ValueError as e:
+                    print(f"Error parsing JSON: {e}")
+                    print("Response content:", response.text)  # Log the raw content for debugging
+                    return None
+
+            else:
+                print(f"Failed to fetch gallery metadata. Status code: {response.status_code}")
+                return None
+
         # For Reddit-hosted videos
         elif 'v.redd.it' in url:
             print(f"Downloading Reddit video from URL: {url}")
@@ -300,12 +361,15 @@ def fetch_new_posts():
     for subreddit_name in SUBREDDITS:
         try:
             subreddit = reddit.subreddit(subreddit_name)
-            for post in subreddit.hot(limit=5):
+            # Get the top 5 posts for the week from the subreddit
+            for index ,post in enumerate(subreddit.top(limit=5, time_filter = 'week')):
+
+                print('this is post number', index)
+
                 if not post.is_self and hasattr(post, 'url'):
                     print(f"\nProcessing post: {post.title[:50]}...")
                     print(f"URL: {post.url}")
                     
-                    # For TikTokCringe, we specifically want video posts
                     if subreddit_name.lower() == 'tiktokcringe' and not (post.is_video or 'v.redd.it' in post.url):
                         print("Skipping non-video post in TikTokCringe")
                         continue
@@ -428,7 +492,19 @@ def post_to_twitter():
             # Upload media using v1.1 API
             print(f"Uploading media file: {upload_path}")
             media_category = 'tweet_video' if is_video else 'tweet_image'
+
+            if not os.path.exists(upload_path):
+                print("File does not exist!")
+            else:
+                print(f"File size: {os.path.getsize(upload_path)} bytes")
+                try:
+                    img = Image.open(upload_path)
+                    print(f"Image format: {img.format}")
+                except Exception as e:
+                    print(f"Error reading image: {e}")
+
             
+            # Ensure that the app's permissions include "Read and Write" 
             media = twitter_api.media_upload(
                 filename=upload_path,
                 media_category=media_category
@@ -502,9 +578,10 @@ def main():
     # Fetch new posts at the start of each day
     schedule.every().day.at("00:00").do(fetch_new_posts)
     
-    # Post to Twitter every 60 minutes
-    # note will make a good tweet schedule whenever analytics are available
-    schedule.every(144).minutes.do(post_to_twitter)
+    
+    # post twice a day
+    schedule.every().day.at("09:00").do(post_to_twitter)  # First post at 9:00 AM
+    schedule.every().day.at("17:00").do(post_to_twitter)  # Second post at 5:00 PM
     
     # Initial fetch
     fetch_new_posts()
